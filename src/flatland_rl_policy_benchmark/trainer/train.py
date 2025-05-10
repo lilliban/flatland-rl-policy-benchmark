@@ -1,20 +1,31 @@
-import torch
-from src.env.environment import EnvironmentBuilder
-from src.policies.DDDQNPolicy import DDDQNPolicy
-from src.policies.PPOPolicy import PPOPolicy
-from src.policies.HeuristicPolicy import HeuristicPolicy
+# train.py
+from flatland_rl_policy_benchmark.env.environment import EnvironmentBuilder
+from flatland_rl_policy_benchmark.policies.HeuristicPolicy import HeuristicPolicy
+from flatland_rl_policy_benchmark.utils.Renderer import Renderer
+import time
 
 def main():
-    params = {"gamma":0.99, "learning_rate":1e-4, "tau":1e-3, "batch_size":32, "buffer_size":100000, "eps_clip":0.2}
-    env = EnvironmentBuilder(width=30, height=30, num_agents=5).generate()
-    # 1) euristica
-    eur = HeuristicPolicy(env)
-    # 2) DDDQN
-    dqn = DDDQNPolicy(100, 5, params)
-    # 3) PPO
-    ppo = PPOPolicy(100,5, params)
-    # scrivi il tuo loop di training per ciascuna policy
-    # salva modelli con .save_model()
+    env = EnvironmentBuilder(width=30, height=30, n_agents=5, seed=42).build()
+    policy = HeuristicPolicy(env)
+    renderer = Renderer(env)
 
-if __name__=="__main__":
+    obs, info = env.reset()
+    renderer.render(show=True)
+
+    done = {agent: False for agent in obs}
+    done["__all__"] = False
+
+    while not done["__all__"]:
+        actions = {}
+        for agent_id in obs:
+            if obs[agent_id] is not None and not done[agent_id]:
+                actions[agent_id] = policy.select_action(agent_id, obs)
+            else:
+                actions[agent_id] = 0  # no-op
+
+        obs, rewards, done, _ = env.step(actions)
+        renderer.render(show=True)
+        time.sleep(0.2)
+
+if __name__ == "__main__":
     main()
