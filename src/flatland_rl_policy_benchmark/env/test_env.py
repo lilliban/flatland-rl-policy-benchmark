@@ -1,40 +1,31 @@
-from flatland.envs.rail_env import RailEnv
-from flatland.envs.rail_generators import sparse_rail_generator
-from flatland.envs.line_generators import sparse_line_generator
-from flatland.envs.observations import TreeObsForRailEnv
-from flatland.envs.predictions import ShortestPathPredictorForRailEnv
+# test_env.py
+
+from flatland_rl_policy_benchmark.env.environment import EnvironmentBuilder
 
 def main():
-    # Genero 2 città su una mappa 50×50
-    rail_gen = sparse_rail_generator(
-        max_num_cities=2,
-        max_rails_between_cities=1,
-        max_rail_pairs_in_city=1,
-        seed=1,
-        grid_mode=False
-    )
-    line_gen = sparse_line_generator()
-    obs_builder = TreeObsForRailEnv(max_depth=2, predictor=ShortestPathPredictorForRailEnv())
+    width, height, n_agents, seed = 35, 35, 3, 42
+    env = EnvironmentBuilder(width, height, n_agents, seed).build()
 
-    env = RailEnv(
-        width=50,
-        height=50,
-        rail_generator=rail_gen,
-        line_generator=line_gen,
-        number_of_agents=2,
-        obs_builder_object=obs_builder,
-        remove_agents_at_target=True
+    # reset “standard” (basta una volta)
+    obs, info = env.reset(
+        regenerate_rail=True,
+        regenerate_schedule=True,
+        random_seed=seed
     )
 
-    # Reset dell'ambiente
-    obs, info = env.reset()
+    # 1) smoke-test delle chiavi di obs/info
     print("Initial observation keys:", list(obs.keys()))
     print("Number of agents:", env.get_num_agents())
-    # info contiene anche, ad esempio, 'max_steps' e 'predicted_paths'
-    print("Reset info keys:", list(info.keys()))
+    print("Reset info keys:",   list(info.keys()))
 
-    # Un singolo passo: tutti gli agenti stazionari (azione 0)
-    actions = {agent_id: 0 for agent_id in obs}
+    # 2) controlla che la schedule esista (initial_position ≠ None e target ≠ None)
+    for agent in env.agents:
+        assert agent.initial_position is not None, "Nessuna initial_position!"
+        assert agent.target           is not None, "Nessun target!"
+        print(f"Agent {agent.handle}: from {agent.initial_position} → {agent.target}")
+
+    # 3) un singolo step
+    actions = {aid: 0 for aid in obs}
     next_obs, rewards, done, info = env.step(actions)
     print("Rewards after one step:", rewards)
     print("Done flags:", done)
