@@ -1,6 +1,6 @@
 import random, numpy as np, torch, torch.nn.functional as F
-from src.policies.DuelingQNetwork import DuelingQNetwork
-from src.utils.ReplayBuffer import ReplayBuffer
+from flatland_rl_policy_benchmark.policies.DuelingQNetwork import DuelingQNetwork
+from flatland_rl_policy_benchmark.utils.ReplayBuffer import ReplayBuffer
 
 class DDDQNPolicy:
     def __init__(self, state_size, action_size, params):

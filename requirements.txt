@@ -1,6 +1,6 @@
 torch>=2.0.0
 numpy>=1.23.0
-flatland-rl>=2.4.0
+flatland-rl>=4.1.0
 pyglet>=2.0.0
 Flask>=2.2.0
 plotly>=5.10.0

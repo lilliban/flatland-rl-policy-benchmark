@@ -1,11 +1,17 @@
+from flatland.envs.rail_env import RailEnvActions
 from flatland.envs.predictions import ShortestPathPredictorForRailEnv
 
 class HeuristicPolicy:
-    """Baseline: segui sempre la rotta più breve."""
     def __init__(self, env):
+        self.env = env
         self.predictor = ShortestPathPredictorForRailEnv()
 
-    def select_action(self, agent_handle, obs):
-        # predictor restituisce lista di (next_cell, direction)
-        next_move = self.predictor.predict(agent_handle, obs)
-        return next_move.direction  # direzione tra {0,1,2,3,4}
+    def select_action(self, agent_handle):
+        # prendo tutte le predizioni in un colpo solo
+        preds = self.predictor.get(self.env)
+        agent_preds = preds.get(agent_handle)
+        # se esistono almeno due passi, prendo la direzione del secondo
+        if agent_preds and len(agent_preds) > 1:
+            return agent_preds[1][1]
+        # altrimenti fermati
+        return RailEnvActions.STOP_MOVING
