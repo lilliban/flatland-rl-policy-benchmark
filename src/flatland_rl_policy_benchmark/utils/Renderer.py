@@ -9,7 +9,22 @@ class Renderer:
             cls._instance._initialized = False
         return cls._instance
 
-    def __init__(self, env, screen_width=1200, screen_height=800):
+    @staticmethod
+    def policy_color_mapping(agent_policy_map):
+        """
+        Restituisce un dizionario {agent_id: colore} in base alla policy.
+        """
+        color_palette = {
+            "DDDQN": [255, 0, 0],     # rosso
+            "PPO": [0, 0, 255],       # blu
+            "Heuristic": [0, 255, 0]  # verde opzionale
+        }
+        return {
+            agent_id: color_palette.get(policy, [128, 128, 128])
+            for agent_id, policy in agent_policy_map.items()
+        }
+
+    def __init__(self, env, agent_policy_map=None, screen_width=1200, screen_height=800):
         if self._initialized: return
         self.env = env
         self.render_tool = RenderTool(

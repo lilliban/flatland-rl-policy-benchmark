@@ -1,11 +1,11 @@
 round,agent_id,policy,total_reward,episode_length,survived_steps,collisions
 1,0,DDDQN,0,0,0,0
-1,1,PPO,0,0,0,0
+1,1,PPO,-57,152,1,151
 2,0,DDDQN,0,0,0,0
-2,1,PPO,0,0,0,0
+2,1,PPO,0,92,1,91
 3,0,DDDQN,0,0,0,0
-3,1,PPO,0,0,0,0
+3,1,PPO,-16,163,1,162
 4,0,DDDQN,0,0,0,0
-4,1,PPO,0,0,0,0
+4,1,PPO,-189,84,1,83
 5,0,DDDQN,0,0,0,0
-5,1,PPO,0,0,0,0
+5,1,PPO,-98,84,1,83

@@ -1,9 +1,10 @@
+
 import os
 import csv
 import torch
 import numpy as np
-from flatland.envs.observations import TreeObsForRailEnv
 import time
+from flatland.envs.observations import TreeObsForRailEnv
 from flatland_rl_policy_benchmark.env.environment import EnvironmentBuilder
 from flatland_rl_policy_benchmark.policies.DDDQNPolicy import DDDQNPolicy
 from flatland_rl_policy_benchmark.policies.PPOPolicy import PPOPolicy
@@ -29,16 +30,10 @@ MODEL_PATHS = {
     "PPO": "ppo_policy.pt"
 }
 
-def run_episode(env, agents):
-    from flatland_rl_policy_benchmark.utils.Renderer import Renderer
-    import time
-
+def run_episode(env, agents, renderer=None):
     obs, _ = env.reset(regenerate_rail=True, regenerate_schedule=True)
     done = {a: False for a in obs}
     states = {a: flatten_obs(obs[a], max_depth=MAX_DEPTH) for a in obs}
-
-    renderer = Renderer(env)
-    renderer.render(show=True)
 
     while not all(done.values()):
         actions = {}
@@ -50,12 +45,21 @@ def run_episode(env, agents):
                 actions[a] = action
 
         next_obs, rewards, done, _ = env.step(actions)
+
+        if renderer:
+            renderer.render()
+            time.sleep(0.2)
+
+        for a in actions:
+            agent = agents[a]
+            if isinstance(agent, PPOPolicy):
+                agent.step(rewards[a], done[a])
+            elif isinstance(agent, DDDQNPolicy):
+                agent.step(states[a], actions[a], rewards[a], flatten_obs(next_obs[a], max_depth=MAX_DEPTH), done[a])
+
         for a in next_obs:
             if not done[a]:
                 states[a] = flatten_obs(next_obs[a], max_depth=MAX_DEPTH)
-
-        renderer.render(show=True)
-        time.sleep(0.2)
 
     return {agent_id: agents[agent_id].metrics() for agent_id in agents}
 
@@ -67,7 +71,6 @@ def main():
     for round_id in range(1, N_ROUNDS + 1):
         print(f"\n🎲 Round {round_id}/{N_ROUNDS}")
 
-        # Costruisci ambiente
         env = EnvironmentBuilder(
             width=MAP_WIDTH,
             height=MAP_HEIGHT,
@@ -81,7 +84,6 @@ def main():
         state_dim = flatten_obs(obs[first_agent], max_depth=MAX_DEPTH).shape[0]
         action_dim = 5
 
-        # Assegna policy a ogni agente
         agents = {}
         policy_names = list(POLICIES.keys())
         for i, agent_id in enumerate(obs):
@@ -93,10 +95,20 @@ def main():
             else:
                 policy.ac.load_state_dict(torch.load(policy_path))
             agents[agent_id] = policy
-            agents[agent_id].__name__ = pname  # per etichetta
+            agents[agent_id].__name__ = pname
 
-        # Esegui l'episodio
-        metrics = run_episode(env, agents)
+        agent_policy_map = {agent_id: agents[agent_id].__name__ for agent_id in agents}
+        from flatland_rl_policy_benchmark.utils.Renderer import Renderer
+        renderer = Renderer(env, agent_policy_map)
+        renderer.render(show=True)
+
+        metrics = run_episode(env, agents, renderer)
+
+        for agent in agents.values():
+            if hasattr(agent, "finish_episode"):
+                agent.finish_episode()
+
+        renderer.close()
 
         for aid, stats in metrics.items():
             results.append({
@@ -106,7 +118,6 @@ def main():
                 **stats
             })
 
-    # Salva CSV
     keys = list(results[0].keys())
     os.makedirs("results", exist_ok=True)
     with open(os.path.join("results", OUTPUT_CSV), "w", newline="") as f:
@@ -115,6 +126,7 @@ def main():
         writer.writerows(results)
 
     print("\n📊 Risultati torneo salvati in 'results/tournament_results.csv'")
+
 
 if __name__ == "__main__":
     main()
