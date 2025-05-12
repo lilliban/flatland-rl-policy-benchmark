@@ -33,24 +33,26 @@ if __name__ == "__main__":
 
     n_episodes = 500
     for ep in range(n_episodes):
-        obs, _ = env.reset(
-            regenerate_rail=True,
-            regenerate_schedule=True,
-            random_seed=ep
-        )
-        done  = {a: False for a in obs}
-        state = flatten_obs(obs[first_agent])
+        obs, _ = env.reset(...)
+        done = {a: False for a in obs}
+        state = flatten_obs(obs[first_agent], max_depth=2)
 
         while not all(done.values()):
             action, logprob = agent.select_action(state)
             next_obs, rewards, done, _ = env.step({first_agent: action})
-            next_state = flatten_obs(next_obs[first_agent])
+            next_state = flatten_obs(next_obs[first_agent], max_depth=2)
 
-            agent.step(state, action, logprob, rewards[first_agent], done[first_agent])
+            agent.step(rewards[first_agent], done[first_agent])
             state = next_state
 
-        if ep % 50 == 0:
-            print(f"Episode {ep} completed")
+        agent.finish_episode()
 
-    torch.save(agent.policy.state_dict(), "ppo_policy.pt")
+        if ep % 50 == 0:
+            print(f"✅ Episode {ep} completed")
+
+
+    torch.save(agent.ac.state_dict(), "ppo_policy.pt")
+
     print("✅ PPO training completed and model saved to ppo_policy.pt")
+    ppo = PPOPolicy(state_size, action_size, params)
+    ppo.ac.load_state_dict(torch.load("ppo_policy.pt"))

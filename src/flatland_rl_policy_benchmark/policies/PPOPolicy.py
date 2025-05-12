@@ -1,3 +1,4 @@
+# PPOPolicy.py
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -24,18 +25,36 @@ class PPOPolicy:
 
         self.ac = ActorCritic(state_size, action_size).to(self.device)
         self.optimizer = optim.Adam(self.ac.parameters(), lr=self.lr)
-        self.memory = []
+
+        self.memory = []  # contiene tuple (state, action, log_prob, value, reward, done)
 
     def select_action(self, obs):
         state = torch.from_numpy(obs).float().to(self.device)
         probs, value = self.ac(state)
         dist = Categorical(probs)
-        action = dist.sample().item()
-        log_prob = dist.log_prob(torch.tensor(action).to(self.device))
-        self.memory.append((state, action, log_prob, value))
-        return action
+        action = dist.sample()
+        log_prob = dist.log_prob(action)
+        # Salvo lo stato, azione, log_prob, valore, reward e done verranno aggiunti dopo
+        self.last_state = state
+        self.last_action = action
+        self.last_log_prob = log_prob
+        self.last_value = value
+        return action.item(), log_prob.item()
 
-    def finish_episode(self, rewards, dones):
+    def step(self, reward, done):
+        # Completa la transizione appena selezionata
+        self.memory.append((
+            self.last_state,
+            self.last_action,
+            self.last_log_prob,
+            self.last_value,
+            reward,
+            done
+        ))
+
+    def finish_episode(self):
+        states, actions, log_probs, values, rewards, dones = zip(*self.memory)
+
         returns = []
         discounted = 0
         for r, d in zip(reversed(rewards), reversed(dones)):
@@ -44,27 +63,45 @@ class PPOPolicy:
             discounted = r + self.gamma * discounted
             returns.insert(0, discounted)
         returns = torch.tensor(returns).float().to(self.device)
-        states, actions, old_log_probs, values = zip(*self.memory)
+
         states = torch.stack(states)
-        actions = torch.tensor(actions).to(self.device)
-        old_log_probs = torch.stack(old_log_probs)
-        values = torch.stack(values).squeeze()
+        actions = torch.stack(actions).to(self.device)
+        old_log_probs = torch.stack(log_probs).to(self.device)
+        values = torch.stack(values).squeeze().to(self.device)
 
         advantages = returns - values.detach()
 
         for _ in range(self.k_epochs):
-            probs, curr_values = self.ac(states)
+            probs, new_values = self.ac(states)
             dist = Categorical(probs)
-            entropy = dist.entropy().mean()
             new_log_probs = dist.log_prob(actions)
-            ratios = torch.exp(new_log_probs - old_log_probs.detach())
+            entropy = dist.entropy().mean()
 
+            ratios = torch.exp(new_log_probs - old_log_probs.detach())
             surr1 = ratios * advantages
             surr2 = torch.clamp(ratios, 1 - self.eps_clip, 1 + self.eps_clip) * advantages
-            loss = -torch.min(surr1, surr2).mean() + 0.5 * (returns - curr_values.squeeze()).pow(2).mean() - 0.01 * entropy
+
+            loss = -torch.min(surr1, surr2).mean() \
+                   + 0.5 * (returns - new_values.squeeze()).pow(2).mean() \
+                   - 0.01 * entropy
 
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
 
         self.memory = []
+
+
+    def metrics(self):
+        """
+        Restituisce metriche base per il torneo.
+        """
+        total_reward = sum([r for (_, _, _, _, r, _) in self.memory])
+        episode_length = len(self.memory)
+        collisions = sum([1 for (_, _, _, _, _, d) in self.memory if not d])  # proxy rozzo
+        return {
+            "total_reward": total_reward,
+            "episode_length": episode_length,
+            "survived_steps": episode_length - collisions,
+            "collisions": collisions
+        }

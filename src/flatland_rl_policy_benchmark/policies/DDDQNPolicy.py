@@ -98,3 +98,15 @@ class DDDQNPolicy:
 
         for tp, lp in zip(self.target_net.parameters(), self.local_net.parameters()):
             tp.data.copy_(self.tau * lp.data + (1.0 - self.tau) * tp.data)
+
+
+    def metrics(self):
+        """
+        Restituisce metriche base per il torneo.
+        """
+        return {
+            "total_reward": getattr(self, "last_total_reward", 0),
+            "episode_length": getattr(self, "last_episode_length", 0),
+            "survived_steps": getattr(self, "last_survived_steps", 0),
+            "collisions": getattr(self, "last_collisions", 0)
+        }

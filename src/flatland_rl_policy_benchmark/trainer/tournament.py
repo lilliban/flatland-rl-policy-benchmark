@@ -1,46 +1,52 @@
+import torch
+import numpy as np
+from flatland.envs.observations import TreeObsForRailEnv
 from flatland_rl_policy_benchmark.env.environment import EnvironmentBuilder
-from flatland_rl_policy_benchmark.policies.HeuristicPolicy import HeuristicPolicy
 from flatland_rl_policy_benchmark.policies.DDDQNPolicy import DDDQNPolicy
 from flatland_rl_policy_benchmark.policies.PPOPolicy import PPOPolicy
-import torch, csv
+from flatland_rl_policy_benchmark.utils.obs_utils import flatten_obs
 
-def run_tournament(n_rounds=5):
-    params = {"gamma":0.99,"learning_rate":1e-4,"tau":1e-3,
-              "batch_size":32,"buffer_size":10000,"eps_clip":0.2}
-    env = EnvironmentBuilder(width=35, height=35, n_agents=1, seed=42).build()
-    obs,_ = env.reset()
-    first = list(obs.keys())[0]
-    state_size  = env.obs_builder.get(first).shape[0]
-    action_size = 5
+def run_episode(policy, env):
+    obs, _ = env.reset(regenerate_rail=True, regenerate_schedule=True)
+    first_agent = list(obs.keys())[0]
+    state = flatten_obs(obs[first_agent])
+    done = {a: False for a in obs}
 
-    coaches = {
-        "Heuristic": HeuristicPolicy(env),
-        "DDDQN":    DDDQNPolicy(state_size, action_size, params),
-        "PPO":      PPOPolicy(state_size, action_size, params)
-    }
-    coaches["DDDQN"].local_net.load_state_dict(torch.load("dddqn_policy.pt"))
-    coaches["PPO"].ac.load_state_dict(torch.load("ppo_policy.pt"))
+    while not all(done.values()):
+        action = policy.select_action(state)
+        next_obs, _, done, _ = env.step({first_agent: action})
+        state = flatten_obs(next_obs[first_agent])
 
-    results=[]
-    for rnd in range(n_rounds):
-        obs,_ = env.reset(); done={a:False for a in obs}; done["__all__"]=False
-        scores={k:0 for k in coaches}
-        while not done["__all__"]:
-            for name, coach in coaches.items():
-                acts = {}
-                for aid in obs:
-                    if name=="Heuristic":
-                        acts[aid] = coach.select_action(aid)
-                    else:
-                        acts[aid] = coach.select_action(aid, env.obs_builder.get(aid))
-                nob, r, done, _ = env.step(acts)
-                scores[name] += sum(r.values())
-                obs = nob
-        for name, sc in scores.items():
-            results.append((rnd, name, sc))
+    return policy  # qui torna l’agente con metriche interne
 
-    with open("tournament_results.csv","w",newline="") as f:
-        w=csv.writer(f); w.writerow(["Round","Policy","Score"]); w.writerows(results)
+def main():
+    env = EnvironmentBuilder(
+        width=50,
+        height=50,
+        n_agents=2,
+        seed=0,
+        obs_builder_object=TreeObsForRailEnv(max_depth=2)
+    ).build()
 
-if __name__=="__main__":
-    run_tournament()
+    # dimensioni per istanziare le policy
+    obs, _ = env.reset(regenerate_rail=True, regenerate_schedule=True, random_seed=0)
+    first_agent = list(obs.keys())[0]
+    state_dim   = flatten_obs(obs[first_agent]).shape[0]
+    action_dim  = 5
+
+    # carica modelli
+    dddqn = DDDQNPolicy(state_dim, action_dim, {"device": "cpu"})
+    dddqn.local_net.load_state_dict(torch.load("dddqn_policy.pt"))
+    ppo   = PPOPolicy(state_dim, action_dim, {"device": "cpu"})
+    ppo.policy.load_state_dict(torch.load("ppo_policy.pt"))
+
+    # esegui match e valuta
+    result1 = run_episode(dddqn, env)
+    result2 = run_episode(ppo,   env)
+
+    # stampa metriche (definisci tu come aggregare)
+    print("DDDQN metrics:", result1.metrics())
+    print("PPO   metrics:", result2.metrics())
+
+if __name__ == "__main__":
+    main()
