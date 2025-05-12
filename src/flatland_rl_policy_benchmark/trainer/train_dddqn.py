@@ -1,35 +1,64 @@
+# train_dddqn.py
+
+import torch
+from flatland.envs.observations import TreeObsForRailEnv
 from flatland_rl_policy_benchmark.env.environment import EnvironmentBuilder
 from flatland_rl_policy_benchmark.policies.DDDQNPolicy import DDDQNPolicy
-import torch
-
-def main():
-    params = {
-        "gamma": 0.99, "learning_rate": 1e-4, "tau": 1e-3,
-        "batch_size": 32, "buffer_size": 10000
-    }
-    env = EnvironmentBuilder(width=35, height=35, n_agents=1, seed=1).build()
-    obs, _ = env.reset()
-
-    first = list(obs.keys())[0]
-    state_size  = env.obs_builder.get(first).shape[0]
-    action_size = 5
-    agent = DDDQNPolicy(state_size, action_size, params)
-
-    for ep in range(100):
-        obs, _ = env.reset()
-        done = {a: False for a in obs}; done["__all__"] = False
-
-        while not done["__all__"]:
-            actions = {aid: agent.select_action(aid, env.obs_builder.get(aid))
-                       for aid in obs if not done.get(aid, False)}
-            next_obs, rewards, done, _ = env.step(actions)
-            for aid in obs:
-                s  = env.obs_builder.get(aid)
-                ns = env.obs_builder.get(aid)
-                agent.step(s, actions[aid], rewards[aid], ns, float(done[aid]))
-            obs = next_obs
-
-    torch.save(agent.local_net.state_dict(), "dddqn_policy.pt")
+from flatland_rl_policy_benchmark.utils.obs_utils import flatten_obs
 
 if __name__ == "__main__":
-    main()
+    max_depth = 2  # profondità dell'albero
+    num_features = 11  # fisso in TreeObs
+
+    # 1) Costruzione ambiente con TreeObs
+    env = EnvironmentBuilder(
+        width=50,
+        height=50,
+        n_agents=2,
+        seed=0,
+        obs_builder_object=TreeObsForRailEnv(max_depth=max_depth)
+    ).build()
+
+    # 2) Reset iniziale per calcolo dimensione osservazione
+    obs, _ = env.reset(regenerate_rail=True, regenerate_schedule=True, random_seed=0)
+    first_agent = list(obs.keys())[0]
+    state_size = flatten_obs(obs[first_agent], max_depth=max_depth).shape[0]
+    action_size = 5  # Flatland: 0–4 azioni
+
+    # 3) Parametri per DDDQN
+    params = {
+        "gamma":         0.99,
+        "tau":           1e-3,
+        "learning_rate": 1e-3,
+        "buffer_size":   int(1e5),
+        "batch_size":    64,
+        "epsilon_start": 1.0,
+        "epsilon_min":   0.01,
+        "epsilon_decay": 0.995,
+        "learn_every":   4,
+        "device":        "cpu"
+    }
+
+    agent = DDDQNPolicy(state_size, action_size, params)
+
+    # 4) Training loop
+    n_episodes = 500
+    for ep in range(n_episodes):
+        obs, _ = env.reset(regenerate_rail=True, regenerate_schedule=True, random_seed=ep)
+        done = {a: False for a in obs}
+        state = flatten_obs(obs[first_agent], max_depth=max_depth)
+
+        while not all(done.values()):
+            action = agent.select_action(state)
+            next_obs, rewards, done, _ = env.step({first_agent: action})
+            next_state = flatten_obs(next_obs[first_agent], max_depth=max_depth)
+
+            agent.step(state, action, rewards[first_agent], next_state, done[first_agent])
+            state = next_state
+
+        if ep % 50 == 0:
+            print(f"✅ Episode {ep} completed")
+
+    # 5) Salvataggio del modello
+    torch.save(agent.local_net.state_dict(), "dddqn_policy.pt")
+    print("🎉 Training completo. Modello salvato in dddqn_policy.pt")
