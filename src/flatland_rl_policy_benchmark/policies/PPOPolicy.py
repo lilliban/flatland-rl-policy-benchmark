@@ -1,4 +1,3 @@
-# PPOPolicy.py
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -26,7 +25,8 @@ class PPOPolicy:
         self.ac = ActorCritic(state_size, action_size).to(self.device)
         self.optimizer = optim.Adam(self.ac.parameters(), lr=self.lr)
 
-        self.memory = []  # contiene tuple (state, action, log_prob, value, reward, done)
+        self.memory = []
+        self.metrics_dict = {}
 
     def select_action(self, obs):
         state = torch.from_numpy(obs).float().to(self.device)
@@ -34,15 +34,15 @@ class PPOPolicy:
         dist = Categorical(probs)
         action = dist.sample()
         log_prob = dist.log_prob(action)
-        # Salvo lo stato, azione, log_prob, valore, reward e done verranno aggiunti dopo
+
         self.last_state = state
         self.last_action = action
         self.last_log_prob = log_prob
         self.last_value = value
+
         return action.item(), log_prob.item()
 
     def step(self, reward, done):
-        # Completa la transizione appena selezionata
         self.memory.append((
             self.last_state,
             self.last_action,
@@ -53,8 +53,10 @@ class PPOPolicy:
         ))
 
     def finish_episode(self):
-        states, actions, log_probs, values, rewards, dones = zip(*self.memory)
+        if not self.memory:
+            return
 
+        states, actions, log_probs, values, rewards, dones = zip(*self.memory)
         returns = []
         discounted = 0
         for r, d in zip(reversed(rewards), reversed(dones)):
@@ -62,8 +64,8 @@ class PPOPolicy:
                 discounted = 0
             discounted = r + self.gamma * discounted
             returns.insert(0, discounted)
-        returns = torch.tensor(returns).float().to(self.device)
 
+        returns = torch.tensor(returns).float().to(self.device)
         states = torch.stack(states)
         actions = torch.stack(actions).to(self.device)
         old_log_probs = torch.stack(log_probs).to(self.device)
@@ -89,19 +91,20 @@ class PPOPolicy:
             loss.backward()
             self.optimizer.step()
 
+        # Salva metriche
+        self.metrics_dict = {
+            "total_reward": sum(rewards),
+            "episode_length": len(self.memory),
+            "survived_steps": len([1 for d in dones if not d]),
+            "collisions": len([1 for d in dones if d])
+        }
+
         self.memory = []
 
-
     def metrics(self):
-        """
-        Restituisce metriche base per il torneo.
-        """
-        total_reward = sum([r for (_, _, _, _, r, _) in self.memory])
-        episode_length = len(self.memory)
-        collisions = sum([1 for (_, _, _, _, _, d) in self.memory if not d])  # proxy rozzo
-        return {
-            "total_reward": total_reward,
-            "episode_length": episode_length,
-            "survived_steps": episode_length - collisions,
-            "collisions": collisions
+        return self.metrics_dict.copy() if self.metrics_dict else {
+            "total_reward": 0,
+            "episode_length": 0,
+            "survived_steps": 0,
+            "collisions": 0
         }
