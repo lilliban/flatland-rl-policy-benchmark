@@ -4,14 +4,19 @@ import torch.optim as optim
 from torch.distributions import Categorical
 
 class ActorCritic(nn.Module):
-    def __init__(self, state_size, action_size, hidden_size=64):
+    def __init__(self, state_size, action_size, hidden_size=256):
         super(ActorCritic, self).__init__()
-        self.fc1 = nn.Linear(state_size, hidden_size)
+        self.shared = nn.Sequential(
+            nn.Linear(state_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size),
+            nn.ReLU()
+        )
         self.policy_head = nn.Linear(hidden_size, action_size)
         self.value_head = nn.Linear(hidden_size, 1)
 
     def forward(self, x):
-        x = torch.tanh(self.fc1(x))
+        x = self.shared(x)
         return torch.softmax(self.policy_head(x), dim=-1), self.value_head(x)
 
 class PPOPolicy:

@@ -11,11 +11,12 @@ from flatland_rl_policy_benchmark.policies.PPOPolicy import PPOPolicy
 from flatland_rl_policy_benchmark.utils.obs_utils import flatten_obs
 from flatland_rl_policy_benchmark.utils.Renderer import Renderer
 
-N_ROUNDS = 50
+N_ROUNDS = 10
+N_EPISODES_PER_ROUND = 5
 N_AGENTS = 2
 MAP_WIDTH = 50
 MAP_HEIGHT = 50
-MAX_DEPTH = 3
+MAX_DEPTH = 5
 OUTPUT_CSV = "tournament_results.csv"
 
 POLICIES = {
@@ -29,12 +30,16 @@ MODEL_PATHS = {
 
 policy_cycle = cycle(POLICIES.keys())
 
+def manhattan(p1, p2):
+    return abs(p1[0] - p2[0]) + abs(p1[1] - p2[1])
+
 def run_episode(env, agents, renderer=None):
     obs, _ = env.reset(regenerate_rail=True, regenerate_schedule=True)
     done = {a: False for a in obs}
     states = {a: flatten_obs(obs[a], max_depth=MAX_DEPTH) for a in obs}
 
-    arrived_count = 0  # 👈 inizializza il contatore dei treni arrivati
+    arrived_count = 0
+    total_rewards = {a: 0 for a in obs}
 
     while not all(done.values()):
         actions = {}
@@ -53,17 +58,31 @@ def run_episode(env, agents, renderer=None):
 
         for a in actions:
             agent = agents[a]
+            pos = env.agents[a].position
+            target = env.agents[a].target
+            new_pos = env.agents[a].position
+
+            if pos is not None and target is not None:
+                old_dist = manhattan(pos, target)
+                new_dist = manhattan(new_pos, target)
+                delta = old_dist - new_dist
+            else:
+                delta = 0
+
             original_reward = rewards[a]
             arrived = done[a] and 'position' in next_obs[a] and next_obs[a]['position'] is None
             collision = original_reward < -1
 
             if arrived:
                 shaped_reward = 100
-                arrived_count += 1  # 👈 incrementa se il treno è arrivato
+                arrived_count += 1
             elif collision:
-                shaped_reward = -50
+                shaped_reward = -5
             else:
-                shaped_reward = -1
+                shaped_reward = -0.1
+
+            shaped_reward += 0.5 * delta
+            total_rewards[a] += shaped_reward
 
             if isinstance(agent, PPOPolicy):
                 agent.step(shaped_reward, done[a])
@@ -74,17 +93,15 @@ def run_episode(env, agents, renderer=None):
             if not done[a]:
                 states[a] = flatten_obs(next_obs[a], max_depth=MAX_DEPTH)
 
-    print(f"🚂 Treni arrivati a destinazione in questo episodio: {arrived_count}")  # 👈 stampa finale
-
-    return {aid: agent.metrics() for aid, agent in agents.items()}
-
+    print(f"🚂 Treni arrivati a destinazione: {arrived_count}")
+    return total_rewards
 
 def main():
-    print("\n🏁 Inizio torneo RL su Flatland...\n")
+    print("\n Inizio torneo RL su Flatland...\n")
     results = []
 
     for round_id in range(1, N_ROUNDS + 1):
-        print(f"\n🎲 Round {round_id}/{N_ROUNDS}")
+        print(f"\n Round {round_id}/{N_ROUNDS}")
 
         env = EnvironmentBuilder(
             width=MAP_WIDTH,
@@ -111,26 +128,26 @@ def main():
                 else:
                     policy.ac.load_state_dict(torch.load(model_path))
             except Exception as e:
-                print(f"⚠️ Errore nel caricare {model_path}: {e}")
+                print(f" Errore nel caricare {model_path}: {e}")
             policy.__name__ = pname
             agents[agent_id] = policy
 
-        renderer = Renderer(env, {aid: agents[aid].__name__ for aid in agents})
-        renderer.render(show=True)
-        metrics = run_episode(env, agents, renderer)
+        total_rewards = {a: 0 for a in agents}
+        for ep in range(N_EPISODES_PER_ROUND):
+            rewards = run_episode(env, agents)
+            for a in rewards:
+                total_rewards[a] += rewards[a]
 
         for agent in agents.values():
             if hasattr(agent, "finish_episode"):
                 agent.finish_episode()
 
-        renderer.close()
-
-        for aid, stats in metrics.items():
+        for aid, total_r in total_rewards.items():
             results.append({
                 "round": round_id,
                 "agent_id": aid,
                 "policy": agents[aid].__name__,
-                **stats
+                "total_reward": total_r / N_EPISODES_PER_ROUND
             })
 
     os.makedirs("results", exist_ok=True)
@@ -139,7 +156,7 @@ def main():
         writer.writeheader()
         writer.writerows(results)
 
-    print("\n📊 Risultati torneo salvati in 'results/tournament_results.csv'")
+    print("\n Risultati torneo salvati in 'results/tournament_results.csv'")
 
 if __name__ == "__main__":
     main()
