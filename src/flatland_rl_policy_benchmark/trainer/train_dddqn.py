@@ -7,7 +7,7 @@ from flatland_rl_policy_benchmark.policies.DDDQNPolicy import DDDQNPolicy
 from flatland_rl_policy_benchmark.utils.obs_utils import flatten_obs
 
 if __name__ == "__main__":
-    max_depth = 2  # profondità dell'albero
+    max_depth = 3  # profondità dell'albero
     num_features = 11  # fisso in TreeObs
 
     # 1) Costruzione ambiente con TreeObs
@@ -53,7 +53,22 @@ if __name__ == "__main__":
             next_obs, rewards, done, _ = env.step({first_agent: action})
             next_state = flatten_obs(next_obs[first_agent], max_depth=max_depth)
 
-            agent.step(state, action, rewards[first_agent], next_state, done[first_agent])
+                        # Reward shaping
+            original_reward = rewards[first_agent]
+            arrived = done[first_agent] and 'position' in next_obs[first_agent] and next_obs[first_agent]['position'] is None
+            collision = original_reward < -1  # puoi raffinarlo se vuoi
+
+            if arrived:
+                shaped_reward = 100
+            elif collision:
+                shaped_reward = -5
+            else:
+                shaped_reward = -0.1
+
+            agent.step(state, action, shaped_reward, next_state, done[first_agent])
+
+            
+            
             state = next_state
 
         if ep % 50 == 0:

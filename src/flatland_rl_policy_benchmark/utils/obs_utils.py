@@ -1,6 +1,6 @@
 import numpy as np
 
-def flatten_obs(obs, max_depth=2, num_features=11):
+def flatten_obs(obs, max_depth=3, num_features=11):
     """
     Appiattisce un'osservazione ad albero in un vettore NumPy di dimensione fissa.
     """

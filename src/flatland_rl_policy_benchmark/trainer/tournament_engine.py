@@ -11,11 +11,11 @@ from flatland_rl_policy_benchmark.policies.PPOPolicy import PPOPolicy
 from flatland_rl_policy_benchmark.utils.obs_utils import flatten_obs
 from flatland_rl_policy_benchmark.utils.Renderer import Renderer
 
-N_ROUNDS = 10
+N_ROUNDS = 50
 N_AGENTS = 2
 MAP_WIDTH = 50
 MAP_HEIGHT = 50
-MAX_DEPTH = 2
+MAX_DEPTH = 3
 OUTPUT_CSV = "tournament_results.csv"
 
 POLICIES = {
@@ -34,6 +34,8 @@ def run_episode(env, agents, renderer=None):
     done = {a: False for a in obs}
     states = {a: flatten_obs(obs[a], max_depth=MAX_DEPTH) for a in obs}
 
+    arrived_count = 0  # 👈 inizializza il contatore dei treni arrivati
+
     while not all(done.values()):
         actions = {}
         for a in obs:
@@ -51,16 +53,31 @@ def run_episode(env, agents, renderer=None):
 
         for a in actions:
             agent = agents[a]
+            original_reward = rewards[a]
+            arrived = done[a] and 'position' in next_obs[a] and next_obs[a]['position'] is None
+            collision = original_reward < -1
+
+            if arrived:
+                shaped_reward = 100
+                arrived_count += 1  # 👈 incrementa se il treno è arrivato
+            elif collision:
+                shaped_reward = -50
+            else:
+                shaped_reward = -1
+
             if isinstance(agent, PPOPolicy):
-                agent.step(rewards[a], done[a])
+                agent.step(shaped_reward, done[a])
             elif isinstance(agent, DDDQNPolicy):
-                agent.step(states[a], actions[a], rewards[a], flatten_obs(next_obs[a], max_depth=MAX_DEPTH), done[a])
+                agent.step(states[a], actions[a], shaped_reward, flatten_obs(next_obs[a], max_depth=MAX_DEPTH), done[a])
 
         for a in next_obs:
             if not done[a]:
                 states[a] = flatten_obs(next_obs[a], max_depth=MAX_DEPTH)
 
+    print(f"🚂 Treni arrivati a destinazione in questo episodio: {arrived_count}")  # 👈 stampa finale
+
     return {aid: agent.metrics() for aid, agent in agents.items()}
+
 
 def main():
     print("\n🏁 Inizio torneo RL su Flatland...\n")
