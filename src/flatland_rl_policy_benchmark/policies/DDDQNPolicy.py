@@ -24,7 +24,7 @@ class DDDQNPolicy:
         lr = params.get("learning_rate", 1e-3)
         self.optimizer = torch.optim.Adam(self.local_net.parameters(), lr=lr)
 
-        buffer_size = params.get("buffer_size", int(1e5))
+        buffer_size = params.get("buffer_size", int(1e4))
         self.memory = ReplayBuffer(buffer_size, self.batch_size, state_size)
 
         self.last_total_reward = 0

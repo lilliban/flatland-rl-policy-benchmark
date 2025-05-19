@@ -11,11 +11,11 @@ from flatland_rl_policy_benchmark.policies.PPOPolicy import PPOPolicy
 from flatland_rl_policy_benchmark.utils.obs_utils import flatten_obs
 from flatland_rl_policy_benchmark.utils.Renderer import Renderer
 
-N_ROUNDS = 10
-N_EPISODES_PER_ROUND = 5
-N_AGENTS = 2
-MAP_WIDTH = 50
-MAP_HEIGHT = 50
+N_ROUNDS = 1
+N_EPISODES_PER_ROUND = 57
+N_AGENTS = 8
+MAP_WIDTH = 25
+MAP_HEIGHT = 25
 MAX_DEPTH = 5
 OUTPUT_CSV = "tournament_results.csv"
 
@@ -28,7 +28,7 @@ MODEL_PATHS = {
     "PPO": "ppo_policy.pt"
 }
 
-policy_cycle = cycle(POLICIES.keys())
+policy_cycle = cycle(["DDDQN"] * 4 + ["PPO"] * 4)
 
 def manhattan(p1, p2):
     return abs(p1[0] - p2[0]) + abs(p1[1] - p2[1])
@@ -54,7 +54,7 @@ def run_episode(env, agents, renderer=None):
 
         if renderer:
             renderer.render()
-            time.sleep(0.1)
+            time.sleep(0.05)
 
         for a in actions:
             agent = agents[a]
@@ -62,26 +62,24 @@ def run_episode(env, agents, renderer=None):
             target = env.agents[a].target
             new_pos = env.agents[a].position
 
-            if pos is not None and target is not None:
-                old_dist = manhattan(pos, target)
-                new_dist = manhattan(new_pos, target)
-                delta = old_dist - new_dist
-            else:
-                delta = 0
+            old_dist = manhattan(pos, target) if pos and target else 0
+            new_dist = manhattan(new_pos, target) if new_pos and target else 0
+            delta = old_dist - new_dist
 
             original_reward = rewards[a]
             arrived = done[a] and 'position' in next_obs[a] and next_obs[a]['position'] is None
             collision = original_reward < -1
 
+            shaped_reward = 0.01 * delta
             if arrived:
-                shaped_reward = 100
+                shaped_reward += 10
                 arrived_count += 1
-            elif collision:
-                shaped_reward = -5
-            else:
-                shaped_reward = -0.1
+            if collision:
+                shaped_reward -= 5
 
-            shaped_reward += 0.5 * delta
+            if action != 0:
+                shaped_reward += 0.1  # premia se si muove
+
             total_rewards[a] += shaped_reward
 
             if isinstance(agent, PPOPolicy):
@@ -93,7 +91,7 @@ def run_episode(env, agents, renderer=None):
             if not done[a]:
                 states[a] = flatten_obs(next_obs[a], max_depth=MAX_DEPTH)
 
-    print(f"🚂 Treni arrivati a destinazione: {arrived_count}")
+    print(f" Treni arrivati a destinazione: {arrived_count}")
     return total_rewards
 
 def main():

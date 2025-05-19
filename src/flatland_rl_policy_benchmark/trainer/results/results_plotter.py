@@ -7,7 +7,7 @@ def plot_dddqn_trend(csv_path="tournament_results.csv", output_dir="results"):
     os.makedirs(output_dir, exist_ok=True)
 
     if not os.path.exists(csv_path):
-        print(f"❌ File non trovato: {csv_path}")
+        print(f" File non trovato: {csv_path}")
         return
 
     df = pd.read_csv(csv_path)
@@ -27,7 +27,7 @@ def plot_dddqn_trend(csv_path="tournament_results.csv", output_dir="results"):
     plt.savefig(output_file)
     plt.close()
 
-    print(f"✅ Grafico salvato in '{output_file}'")
+    print(f" Grafico salvato in '{output_file}'")
 
 if __name__ == "__main__":
     plot_dddqn_trend()
