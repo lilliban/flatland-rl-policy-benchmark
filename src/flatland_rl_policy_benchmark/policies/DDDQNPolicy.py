@@ -42,7 +42,10 @@ class DDDQNPolicy:
         state_t = torch.from_numpy(obs).float().unsqueeze(0).to(self.device)
         with torch.no_grad():
             q_vals = self.local_net(state_t)
+        if hasattr(self, "valid_actions") and self.valid_actions is not None:
+            q_vals[0][[i for i in range(len(q_vals[0])) if i not in self.valid_actions]] = -float("inf")
         return int(q_vals.argmax().item())
+
 
     def step(self, state, action, reward, next_state, done):
         self.memory.add(state, action, reward, next_state, done)

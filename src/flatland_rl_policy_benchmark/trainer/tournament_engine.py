@@ -11,12 +11,12 @@ from flatland_rl_policy_benchmark.policies.PPOPolicy import PPOPolicy
 from flatland_rl_policy_benchmark.utils.obs_utils import flatten_obs
 from flatland_rl_policy_benchmark.utils.Renderer import Renderer
 
-N_ROUNDS = 1
-N_EPISODES_PER_ROUND = 57
+N_ROUNDS = 10
+N_EPISODES_PER_ROUND = 1000
 N_AGENTS = 8
 MAP_WIDTH = 25
 MAP_HEIGHT = 25
-MAX_DEPTH = 5
+MAX_DEPTH = 3
 OUTPUT_CSV = "tournament_results.csv"
 
 POLICIES = {
