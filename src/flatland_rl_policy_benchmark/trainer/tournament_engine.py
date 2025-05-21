@@ -1,4 +1,4 @@
-import os
+import os 
 import csv
 import torch
 import numpy as np
@@ -67,7 +67,8 @@ def run_episode(env, agents, renderer=None):
             delta = old_dist - new_dist
 
             original_reward = rewards[a]
-            arrived = done[a] and 'position' in next_obs[a] and next_obs[a]['position'] is None
+            
+            arrived = env.agents[a].state == 6 
             collision = original_reward < -1
 
             shaped_reward = 0.01 * delta
