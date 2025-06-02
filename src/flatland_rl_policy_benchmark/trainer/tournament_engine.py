@@ -117,10 +117,12 @@ def main():
 
         agents = {}
         policy_names = [next(policy_cycle) for _ in range(N_AGENTS)]
+        
         for i, agent_id in enumerate(obs):
             pname = policy_names[i % len(policy_names)]
             policy = POLICIES[pname](state_dim, action_dim)
             model_path = MODEL_PATHS[pname]
+            print(f" Agente {agent_id} usa la policy '{pname}' con modello: {model_path}")
             try:
                 if pname == "DDDQN":
                     policy.local_net.load_state_dict(torch.load(model_path))

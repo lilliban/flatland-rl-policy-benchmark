@@ -32,10 +32,14 @@ class EnvironmentBuilder:
         env = RailEnv(
             width=self.width,
             height=self.height,
+            
+            
             rail_generator=sparse_rail_generator(
                 max_num_cities=self.max_cities,
                 seed=self.seed,
-                grid_mode=True
+                grid_mode=True, 
+                max_rails_between_cities=3,
+                max_rail_pairs_in_city=2
             ),
             line_generator=sparse_line_generator(),
             number_of_agents=self.n_agents,
