@@ -1,55 +1,35 @@
+import random
 import numpy as np
+from collections import deque, namedtuple
+import torch
 
+# memorizza transizioni, è dove vengono salvate le esperienze dell'agente
+# quando poi viene fatto il learn non impara solo dall'ultima esperienza ma da un batch di esperinze prese a caso
 class ReplayBuffer:
-    def __init__(self, buffer_size: int, batch_size: int, state_dim: int):
-        self.buffer_size = buffer_size
+    def __init__(self, buffer_size, batch_size, device):
+        # viene implementata con una deque, cioè una CODA con doppia estremità. hai che quando arrivi a buffer_size se aggiungi un altro elemnto il più VECCHIO vine automaticamente rimosso
+        self.memory = deque(maxlen=buffer_size)
+        # Numero di esperinze che prelevo ogni volta che faccio il sample ()
         self.batch_size = batch_size
-        self.state_dim = state_dim
-
-        print(f" Inizializzazione ReplayBuffer: buffer_size={buffer_size}, batch_size={batch_size}, state_dim={state_dim}")
-        self.states = np.zeros((buffer_size, state_dim), dtype=np.float32)
-        self.next_states = np.zeros((buffer_size, state_dim), dtype=np.float32)
-        self.actions = np.zeros(buffer_size, dtype=np.int64)
-        self.rewards = np.zeros(buffer_size, dtype=np.float32)
-        self.dones = np.zeros(buffer_size, dtype=bool)
-
-        self.ptr = 0
-        self.size = 0
+        self.device = device
+        self.experience = namedtuple("Experience", 
+            field_names=["state", "action", "reward", "next_state", "done"])
 
     def add(self, state, action, reward, next_state, done):
-        idx = self.ptr
-        self.states[idx] = state
-        self.next_states[idx] = next_state
-        self.actions[idx] = action
-        self.rewards[idx] = reward
-        self.dones[idx] = done
-
-        self.ptr = (idx + 1) % self.buffer_size
-        self.size = min(self.size + 1, self.buffer_size)
-
-        # Logging per analisi
-        if self.size % 5000 == 0 and self.ptr == 0:
-            with open("replaybuffer.log", "a") as f:
-                f.write(f" Buffer attualmente contiene {self.size} transizioni\n")
+        e = self.experience(state, action, reward, next_state, done)
+        self.memory.append(e)
 
     def sample(self):
-        idxs = np.random.randint(0, self.size, size=self.batch_size)
-        return (
-            self.states[idxs],
-            self.actions[idxs],
-            self.rewards[idxs],
-            self.next_states[idxs],
-            self.dones[idxs]
-        )
+        experiences = random.sample(self.memory, k=self.batch_size)
 
+        states = torch.from_numpy(np.stack([e.state for e in experiences])).float().to(self.device)
+        actions = torch.tensor([e.action for e in experiences]).long().to(self.device)
+        rewards = torch.tensor([e.reward for e in experiences]).float().to(self.device)
+        next_states = torch.from_numpy(np.stack([e.next_state for e in experiences])).float().to(self.device)
+        dones = torch.tensor([e.done for e in experiences]).float().to(self.device)
+
+        return (states, actions, rewards, next_states, dones)
+
+    # ti permette di sapere quante esperienze ci sono nel buffer in quel momento
     def __len__(self):
-        return self.size
-
-    def get_diversity(self, sample_size=1000):
-        sample_size = min(sample_size, self.size)
-        if sample_size == 0:
-            return 0
-        idxs = np.random.choice(self.size, sample_size, replace=False)
-        states = self.states[idxs]
-        # Calcola la varianza media tra le feature (proxy di diversità)
-        return np.mean(np.var(states, axis=0))
+        return len(self.memory)

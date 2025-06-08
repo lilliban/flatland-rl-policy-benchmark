@@ -1,37 +1,33 @@
+import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
+#va a stimare il valore dell'azione, riceve le osservazioni, le elabora e restituisce il q value
 class DuelingQNetwork(nn.Module):
-    def __init__(self, input_dim, output_dim, hidden_dim=256):
+    def __init__(self, state_size, action_size, hidden_dim, dropout_prob=0.2):
         super(DuelingQNetwork, self).__init__()
+        
         self.feature = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
+            nn.Linear(state_size, hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.ReLU()
+            nn.Dropout(dropout_prob)
         )
+
         self.value_stream = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim//2),
+            nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim//2, 1)
+            nn.Linear(hidden_dim, 1)
         )
+
         self.advantage_stream = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim//2),
+            nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim//2, output_dim)
+            nn.Linear(hidden_dim, action_size)
         )
-        self._initialize_weights()
 
-    def _initialize_weights(self):
-        for m in self.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='relu')
-                nn.init.constant_(m.bias, 0)
-
-    def forward(self, x):
-        features = self.feature(x)
-        value = self.value_stream(features)
-        advantage = self.advantage_stream(features)
-        q_values = value + (advantage - advantage.mean(dim=1, keepdim=True))
-        return q_values
+    def forward(self, state):
+        features = self.feature(state)
+        values = self.value_stream(features)
+        advantages = self.advantage_stream(features)
+        q_vals = values + (advantages - advantages.mean(dim=1, keepdim=True))
+        return q_vals

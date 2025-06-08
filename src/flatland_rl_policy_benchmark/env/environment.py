@@ -2,7 +2,8 @@ from flatland.envs.rail_env import RailEnv
 from flatland.envs.rail_generators import sparse_rail_generator
 from flatland.envs.line_generators import sparse_line_generator
 from flatland.envs.observations import GlobalObsForRailEnv
-
+#QUESTA CLASSE è UN HELPER
+#usa RailEnv per creare ambienti di simulazione di treni
 class EnvironmentBuilder:
     """
     Builder per RailEnv, con possibilità di specificare
@@ -20,13 +21,13 @@ class EnvironmentBuilder:
         self.n_agents           = n_agents
         self.seed               = seed
         self.max_cities         = max_cities
+        self.max_num_cities     = max_cities
 
-        # Se non viene passato nulla, uso la global view di default
-        self.obs_builder_object = (
-            obs_builder_object
-            if obs_builder_object is not None
-            else GlobalObsForRailEnv()
-        )
+        # nel DDDQN dovresti sempre essere sicura di passare TreeObs, quindi lo metti di default
+        if obs_builder_object is None:
+            raise ValueError("obs_builder_object must be provided! (e.g. TreeObsForRailEnv)")
+
+        self.obs_builder_object = obs_builder_object
 
     def build(self) -> RailEnv:
         env = RailEnv(

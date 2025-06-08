@@ -3,81 +3,84 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+# questa funzione fa un grafico per ogni file evolution_levelX.csv nella directory
 def plot_evolution_results(save_dir):
-    """Genera grafici per tutti i file CSV nella directory"""
-    for file in os.listdir(save_dir):
-        if file.startswith("evolution_level") and file.endswith(".csv"):
-            csv_path = os.path.join(save_dir, file)
-            output_path = os.path.join(save_dir, f"plot_{file.replace('.csv', '.png')}")
-            
-            try:
-                df = pd.read_csv(csv_path)
-                
-                # Prepara i dati
-                df['episode_num'] = df.groupby(['level', 'branch']).cumcount() + 1
-                
-                # Crea figura
-                plt.figure(figsize=(12, 6))
-                sns.set_style("whitegrid")
-                
-                # Plot per ogni branch
-                for branch in df['branch'].unique():
-                    branch_df = df[df['branch'] == branch]
-                    plt.plot(branch_df['episode_num'], 
-                            branch_df['reward'].rolling(10, min_periods=1).mean(),
-                            label=f"{branch} (smoothed)")
-                
-                plt.axhline(0, color='red', linestyle='--', alpha=0.5)
-                plt.title('Evolutionary DDDQN Training Progress')
-                plt.xlabel('Episode')
-                plt.ylabel('Reward')
-                plt.legend()
-                plt.tight_layout()
-                
-                plt.savefig(output_path, dpi=300)
-                plt.close()
-                print(f" Grafico generato: {output_path}")
-                
-            except Exception as e:
-                print(f" Errore con {file}: {str(e)}")
+    # Trova tutti i file evolution_levelX.csv nella directory
+    files = [f for f in os.listdir(save_dir) if f.startswith("evolution_level") and f.endswith(".csv")]
+    if not files:
+        print("Nessun file di evoluzione trovato nella directory.")
+        return
+
+    for file in files:
+        csv_path = os.path.join(save_dir, file)
+        df = pd.read_csv(csv_path, on_bad_lines='skip')
+        # pulisce la colonna reward da evntuali NaN o valori non numerici
+        df['reward'] = pd.to_numeric(df['reward'], errors='coerce')
+        df.dropna(subset=['reward'], inplace=True)
+
+        # Liscia la curva
+        df['smoothed_reward'] = df['reward'].rolling(window=60, min_periods=1).mean()
+
+        plt.figure(figsize=(10, 6))
+        plt.plot(df['episode'], df['smoothed_reward'], label='Smoothed Reward')
+        plt.xlabel('Episode')
+        plt.ylabel('Reward')
+        plt.title(f'Evolution - {file.replace(".csv", "")}')
+        plt.grid(True)
+        plt.tight_layout()
+        output_path = os.path.join(save_dir, file.replace(".csv", ".png"))
+        plt.savefig(output_path)
+        plt.close()
+        print(f"Grafico salvato in: {output_path}")
+
 
 def plot_combined_results(save_dir):
-    """Grafico combinato di tutti i livelli"""
+    best_path = os.path.join(save_dir, "combined_parallel_training.png")
+    if os.path.exists(best_path):
+        os.remove(best_path)
+
     all_data = []
-    
     for file in os.listdir(save_dir):
         if file.startswith("evolution_level") and file.endswith(".csv"):
             df = pd.read_csv(os.path.join(save_dir, file))
+            df['reward'] = pd.to_numeric(df['reward'], errors='coerce')
+            df.dropna(subset=['reward'], inplace=True)
+            df['level'] = file.split('_')[1].replace('level', '')
             all_data.append(df)
-    
+
     if not all_data:
+        print("Nessun file valido trovato per la combinazione.")
         return
-        
-    combined_df = pd.concat(all_data)
-    combined_df['episode_num'] = combined_df.groupby(['level', 'branch']).cumcount() + 1
-    
-    plt.figure(figsize=(14, 7))
+
+    combined_df = pd.concat(all_data, ignore_index=True)
+    combined_df['global_episode'] = combined_df.groupby(['level', 'branch']).cumcount() + 1
+
+    plt.figure(figsize=(14, 8))
     sns.set_style("whitegrid")
-    
-    # Colori diversi per ogni livello
-    palette = sns.color_palette("husl", combined_df['level'].nunique())
-    
+
+    palette = sns.color_palette("Set2", combined_df['level'].nunique())
+    line_styles = {
+        'B0': '-', 'B1': '--', 'B2': '-.', 'B3': ':', 'B4': (0, (5, 10)),
+    }
+
     for i, (level, group) in enumerate(combined_df.groupby('level')):
         for branch in group['branch'].unique():
             branch_df = group[group['branch'] == branch]
-            plt.plot(branch_df['episode_num'], 
-                    branch_df['reward'].rolling(20, min_periods=1).mean(),
-                    color=palette[i],
-                    linestyle='--' if 'B1' in branch else '-',
-                    label=f"L{level}_{branch.split('_')[-1]}")
-    
-    plt.title('Combined Evolutionary Training Progress')
-    plt.xlabel('Episode')
-    plt.ylabel('Smoothed Reward')
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+            branch_key = branch.split('_')[-1]
+            plt.plot(branch_df['global_episode'],
+                     branch_df['reward'].rolling(60, min_periods=1).mean(),
+                     color=palette[i],
+                     linestyle=line_styles.get(branch_key, '-'),
+                     label=f"Level {level} - {branch}")
+
+    plt.title('Combined Evolutionary Training Progress (Parallel)', fontsize=14)
+    plt.xlabel('Global Episode Number', fontsize=12)
+    plt.ylabel('Smoothed Reward (window=60)', fontsize=12)
+    plt.axhline(0, color='gray', linestyle=':', alpha=0.5)
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10)
+    plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    
-    output_path = os.path.join(save_dir, "combined_training_plot.png")
-    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+
+    plt.savefig(best_path, dpi=300, bbox_inches='tight')
     plt.close()
-    print(f" Grafico combinato generato: {output_path}")
+    print(f"Grafico combinato generato: {best_path}")
