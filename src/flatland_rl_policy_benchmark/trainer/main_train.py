@@ -210,7 +210,7 @@ def main():
         root = build_tree_structure()
         # Esegui l'addestramento parallelo
         parallel_tree_training(root)
-        # Genera i grafici
+        # Genera i grafici alla fine di tutto, cioè dopo che che tutto l'albero è stato processato
         csv_files = [f for f in os.listdir(BASE_SAVE_DIR) if f.startswith("evolution_level") and f.endswith(".csv")]
         if csv_files:
             logger.info("Generazione dei grafici...")

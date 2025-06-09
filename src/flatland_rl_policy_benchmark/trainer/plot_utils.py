@@ -19,23 +19,36 @@ def plot_evolution_results(save_dir):
         df.dropna(subset=['reward'], inplace=True)
 
         # Liscia la curva
-        df['smoothed_reward'] = df['reward'].rolling(window=60, min_periods=1).mean()
-
-        plt.figure(figsize=(10, 6))
-        plt.plot(df['episode'], df['smoothed_reward'], label='Smoothed Reward')
-        plt.xlabel('Episode')
-        plt.ylabel('Reward')
-        plt.title(f'Evolution - {file.replace(".csv", "")}')
-        plt.grid(True)
-        plt.tight_layout()
-        output_path = os.path.join(save_dir, file.replace(".csv", ".png"))
-        plt.savefig(output_path)
-        plt.close()
-        print(f"Grafico salvato in: {output_path}")
+        df['raw_episode_reward'] = pd.to_numeric(df['raw_episode_reward'], errors='coerce')
+        df.dropna(subset=['raw_episode_reward'], inplace=True)
+        if 'shaped_episode_reward' in df.columns:
+                df['smoothed_reward'] = df['shaped_episode_reward'].rolling(window=60, min_periods=1).mean()
+                
+                plt.figure(figsize=(10, 6))
+                plt.plot(df['episode'], df['smoothed_reward'], label='Smoothed Shaped Reward')
+                plt.xlabel('Episode')
+                plt.ylabel('Reward')
+                plt.title(f'Evolution - {file.replace(".csv", "")}')
+                plt.grid(True)
+                plt.tight_layout()
+                output_path = os.path.join(save_dir, file.replace(".csv", ".png"))
+                plt.savefig(output_path)
+                plt.close()
+                print(f"Grafico salvato in: {output_path}")
+        else:
+                print(f"⚠️  Il file {file} non contiene 'shaped_episode_reward'. Skipping.")
+                continue
+        
+      
 
 
 def plot_combined_results(save_dir):
-    best_path = os.path.join(save_dir, "combined_parallel_training.png")
+    plot_combined_results_generic(save_dir, target_column='raw_episode_reward', suffix='raw')
+    plot_combined_results_generic(save_dir, target_column='shaped_episode_reward', suffix='shaped')
+
+
+def plot_combined_results_generic(save_dir, target_column='raw_episode_reward', suffix='raw'):
+    best_path = os.path.join(save_dir, f"combined_parallel_training_{suffix}.png")
     if os.path.exists(best_path):
         os.remove(best_path)
 
@@ -46,10 +59,19 @@ def plot_combined_results(save_dir):
             df['reward'] = pd.to_numeric(df['reward'], errors='coerce')
             df.dropna(subset=['reward'], inplace=True)
             df['level'] = file.split('_')[1].replace('level', '')
+
+            # Verifica se il target_column esiste
+            if target_column not in df.columns:
+                print(f"⚠️ Il file {file} non contiene '{target_column}'. Skipping.")
+                continue
+
+            df[target_column] = pd.to_numeric(df[target_column], errors='coerce')
+            df.dropna(subset=[target_column], inplace=True)
+
             all_data.append(df)
 
     if not all_data:
-        print("Nessun file valido trovato per la combinazione.")
+        print(f"Nessun file valido trovato per la combinazione per '{target_column}'.")
         return
 
     combined_df = pd.concat(all_data, ignore_index=True)
@@ -67,15 +89,16 @@ def plot_combined_results(save_dir):
         for branch in group['branch'].unique():
             branch_df = group[group['branch'] == branch]
             branch_key = branch.split('_')[-1]
+
             plt.plot(branch_df['global_episode'],
-                     branch_df['reward'].rolling(60, min_periods=1).mean(),
+                     branch_df[target_column].rolling(60, min_periods=1).mean(),
                      color=palette[i],
                      linestyle=line_styles.get(branch_key, '-'),
                      label=f"Level {level} - {branch}")
 
-    plt.title('Combined Evolutionary Training Progress (Parallel)', fontsize=14)
+    plt.title(f'Combined Evolutionary Training Progress ({target_column})', fontsize=14)
     plt.xlabel('Global Episode Number', fontsize=12)
-    plt.ylabel('Smoothed Reward (window=60)', fontsize=12)
+    plt.ylabel(f'Smoothed {target_column} (window=60)', fontsize=12)
     plt.axhline(0, color='gray', linestyle=':', alpha=0.5)
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10)
     plt.grid(True, alpha=0.3)

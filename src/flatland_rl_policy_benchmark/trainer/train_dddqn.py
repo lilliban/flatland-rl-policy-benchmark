@@ -36,11 +36,11 @@ def calculate_shaped_reward(old_pos, new_pos, target, action, arrived, collision
 
     # Reward per completamento
     if arrived:
-        reward += 10
+        reward += 1000
     
     # Penalità per collisione
     if collision:
-        reward -= 2
+        reward -= 200
     
     # Stalling penalty
     #if steps_without_progress > 10 and not arrived:
@@ -156,14 +156,17 @@ def train(round_start, n_rounds, branch_name, parent_path, save_dir, level=0, wi
         agent.load_model(parent_path)
         logger.info(f"Caricato modello padre: {parent_path}")
     
-    #crea il file che contiene i risultati, metti a perchè è append 
-    with open(csv_path, "a", newline="") as csvf:
+    write_header = not os.path.exists(csv_path)
+    #crea il file che contiene i risultati, metti a perchè è append
+    with open(csv_path, "a" if not write_header else "w", newline="") as csvf:
         writer = csv.writer(csvf)
-        #intestazione delle colonne
-        writer.writerow([
-            "level", "branch", "round", "episode", "reward", "epsilon",
-            "arrivati", "collisioni", "steps", "unique_states", "learning_rate"
-        ])
+
+        if write_header:  
+            # intestazione delle colonne
+            writer.writerow([
+                "level", "branch", "round", "episode", "reward", "epsilon",
+                "arrivati", "collisioni", "steps", "raw_episode_reward", "shaped_episode_reward", "learning_rate"
+            ])
 
     #crea la barra di avanzamento per il training, ogni training farà n_rounds round e in ogni round farà n_episodes episodi → quindi total = n_rounds * n_episodes
     pbar = tqdm(total=n_rounds * n_episodes, desc=f"Training {branch_name}")
@@ -188,7 +191,9 @@ def train(round_start, n_rounds, branch_name, parent_path, save_dir, level=0, wi
                 collision_count = 0
                 total_steps = 0
                 current_dists = {}
-
+                raw_episode_reward = 0
+                shaped_episode_reward = 0
+                
                 while not env.dones["__all__"]:
                     active_agents = [a for a in obs if not done[a]]
                     if not active_agents:
@@ -214,9 +219,12 @@ def train(round_start, n_rounds, branch_name, parent_path, save_dir, level=0, wi
                             old_pos, new_pos, target,
                             actions[a], arrived, collision, done_info[a]
                         )
+                        shaped_episode_reward += shaped_reward
                         agent.step(states[a], actions[a], shaped_reward, next_state, done[a])
                         states[a] = next_state
                         previous_positions[a] = new_pos
+                        raw_episode_reward += rewards[a]
+
                         #aggiornamenti di stato
                         episode_reward += shaped_reward
                         if arrived:
@@ -237,7 +245,8 @@ def train(round_start, n_rounds, branch_name, parent_path, save_dir, level=0, wi
                         str(level), str(branch_name), str(r + 1), str(ep + 1),
                         f"{episode_reward:.2f}", f"{epsilon:.4f}",
                         str(arrived_count), str(collision_count), str(total_steps),
-                        #f"{unique_samples:.1f}", f"{current_lr:.6f}"
+                        f"{raw_episode_reward:.2f}", f"{shaped_episode_reward:.2f}",
+                        f"{current_lr:.6f}"
                     ])
                 all_rewards.append(episode_reward)
                 
@@ -262,9 +271,9 @@ def train(round_start, n_rounds, branch_name, parent_path, save_dir, level=0, wi
                     no_improve_count = 0
                 else:
                     no_improve_count += 1
-                    if no_improve_count >= patience:
-                        agent.adjust_learning_rate(0.8)
-                        no_improve_count = 0
+                    #if no_improve_count >= patience:
+                    #    agent.adjust_learning_rate(0.8)
+                    #    no_improve_count = 0
             except Exception as e:
                 logger.error(f"Errore durante l'episodio {ep+1} nel branch {branch_name}: {e}")
                 continue
