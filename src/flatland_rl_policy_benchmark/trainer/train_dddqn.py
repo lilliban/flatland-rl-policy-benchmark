@@ -128,7 +128,7 @@ def train(round_start, n_rounds, branch_name, parent_path, save_dir, level=0, wi
         "tau": 0.001,
         # learning rate è il tasso di apprendimento, cioè quanto velocemente l'agente impara
         #più è alto più l'agente impara velocemente, ma può diventare instabile, più è basso più l'agente impara lentamente ma in modo stabile
-        "learning_rate": 0.0005,
+        "learning_rate": 0.0001,
         #200'000 esperienze memorizzate, se è troppo grande può avere esperinze troppo vecchie
         "buffer_size": int(2e5),
         #se è piccolo aggiorna spesso ma con più rumore, se è grande è più robusto ma serve più memoria
@@ -138,7 +138,7 @@ def train(round_start, n_rounds, branch_name, parent_path, save_dir, level=0, wi
        #mi dice come scelgo le azioni durante il traing, quando eplison scende esploro meno
         "epsilon_min": 0.05,
         #lentamnete epsilon scende
-        "epsilon_decay": 0.9993, 
+        "epsilon_decay": 0.998, 
         #ogni quanto apprendi, con 8 o 4 è piu stabile
         "learn_every": 4,
         "device": "cuda" if torch.cuda.is_available() else "cpu",
@@ -271,9 +271,9 @@ def train(round_start, n_rounds, branch_name, parent_path, save_dir, level=0, wi
                     no_improve_count = 0
                 else:
                     no_improve_count += 1
-                    #if no_improve_count >= patience:
-                    #    agent.adjust_learning_rate(0.8)
-                    #    no_improve_count = 0
+                    if no_improve_count >= patience:
+                        agent.adjust_learning_rate(0.8)
+                        no_improve_count = 0
             except Exception as e:
                 logger.error(f"Errore durante l'episodio {ep+1} nel branch {branch_name}: {e}")
                 continue

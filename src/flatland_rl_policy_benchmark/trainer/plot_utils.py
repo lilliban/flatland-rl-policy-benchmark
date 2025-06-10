@@ -36,18 +36,15 @@ def plot_evolution_results(save_dir):
                 plt.close()
                 print(f"Grafico salvato in: {output_path}")
         else:
-                print(f"⚠️  Il file {file} non contiene 'shaped_episode_reward'. Skipping.")
+                print(f"  Il file {file} non contiene 'shaped_episode_reward'. Skipping.")
                 continue
         
-      
-
-
 def plot_combined_results(save_dir):
     plot_combined_results_generic(save_dir, target_column='raw_episode_reward', suffix='raw')
     plot_combined_results_generic(save_dir, target_column='shaped_episode_reward', suffix='shaped')
 
-
 def plot_combined_results_generic(save_dir, target_column='raw_episode_reward', suffix='raw'):
+    n_episodes_per_round = 100  #  Cambia qui se cambi il tuo valore in train.py
     best_path = os.path.join(save_dir, f"combined_parallel_training_{suffix}.png")
     if os.path.exists(best_path):
         os.remove(best_path)
@@ -60,45 +57,52 @@ def plot_combined_results_generic(save_dir, target_column='raw_episode_reward', 
             df.dropna(subset=['reward'], inplace=True)
             df['level'] = file.split('_')[1].replace('level', '')
 
-            # Verifica se il target_column esiste
+            # Verifica che la colonna target esista
             if target_column not in df.columns:
-                print(f"⚠️ Il file {file} non contiene '{target_column}'. Skipping.")
+                print(f" Il file {file} non contiene '{target_column}'. Skipping.")
                 continue
 
             df[target_column] = pd.to_numeric(df[target_column], errors='coerce')
             df.dropna(subset=[target_column], inplace=True)
 
+            # 🔁 Calcolo corretto dell’episodio globale
+            df['round'] = pd.to_numeric(df['round'], errors='coerce')
+            df['episode'] = pd.to_numeric(df['episode'], errors='coerce')
+            df = df.sort_values(by=['level', 'branch', 'round', 'episode'])
+            df['global_episode'] = (df['round'] - 1) * n_episodes_per_round + df['episode']
+
             all_data.append(df)
 
     if not all_data:
-        print(f"Nessun file valido trovato per la combinazione per '{target_column}'.")
+        print(f"Nessun file valido trovato per '{target_column}'.")
         return
 
     combined_df = pd.concat(all_data, ignore_index=True)
-    combined_df['global_episode'] = combined_df.groupby(['level', 'branch']).cumcount() + 1
 
     plt.figure(figsize=(14, 8))
     sns.set_style("whitegrid")
 
     palette = sns.color_palette("Set2", combined_df['level'].nunique())
-    line_styles = {
-        'B0': '-', 'B1': '--', 'B2': '-.', 'B3': ':', 'B4': (0, (5, 10)),
-    }
+    line_styles = {'B0': '-', 'B1': '--', 'B2': '-.', 'B3': ':', 'B4': (0, (5, 10))}
 
     for i, (level, group) in enumerate(combined_df.groupby('level')):
         for branch in group['branch'].unique():
-            branch_df = group[group['branch'] == branch]
+            branch_df = group[group['branch'] == branch].copy()
             branch_key = branch.split('_')[-1]
 
+            # Rolling dinamico in base alla lunghezza del branch
+            rolling_window = max(10, len(branch_df) // 20)
+
+            smoothed = branch_df[target_column].rolling(window=rolling_window, min_periods=1).mean()
             plt.plot(branch_df['global_episode'],
-                     branch_df[target_column].rolling(60, min_periods=1).mean(),
+                     smoothed,
                      color=palette[i],
                      linestyle=line_styles.get(branch_key, '-'),
                      label=f"Level {level} - {branch}")
 
     plt.title(f'Combined Evolutionary Training Progress ({target_column})', fontsize=14)
     plt.xlabel('Global Episode Number', fontsize=12)
-    plt.ylabel(f'Smoothed {target_column} (window=60)', fontsize=12)
+    plt.ylabel(f'Smoothed {target_column}', fontsize=12)
     plt.axhline(0, color='gray', linestyle=':', alpha=0.5)
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10)
     plt.grid(True, alpha=0.3)
