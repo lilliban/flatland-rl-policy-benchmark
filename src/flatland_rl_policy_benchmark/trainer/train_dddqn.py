@@ -32,7 +32,8 @@ def calculate_shaped_reward(old_pos, new_pos, target, action, arrived, collision
             reward += delta * 1.0  
         elif delta < 0:
             #si allontna
-            reward -= abs(delta) * 2.0
+            reward -= abs(delta) * 0.5
+            #puoi provare cosi reward -= np.sqrt(abs(delta)) * 1.0
 
     # Reward per completamento
     if arrived:
@@ -219,8 +220,12 @@ def train(round_start, n_rounds, branch_name, parent_path, save_dir, level=0, wi
                             old_pos, new_pos, target,
                             actions[a], arrived, collision, done_info[a]
                         )
+                       
+                        
+                        scaling_factor = 0.1
+                        final_reward = scaling_factor * rewards[a] + shaped_reward
                         shaped_episode_reward += shaped_reward
-                        agent.step(states[a], actions[a], shaped_reward, next_state, done[a])
+                        agent.step(states[a], actions[a], final_reward, next_state, done[a])
                         states[a] = next_state
                         previous_positions[a] = new_pos
                         raw_episode_reward += rewards[a]
@@ -271,9 +276,9 @@ def train(round_start, n_rounds, branch_name, parent_path, save_dir, level=0, wi
                     no_improve_count = 0
                 else:
                     no_improve_count += 1
-                    if no_improve_count >= patience:
-                        agent.adjust_learning_rate(0.8)
-                        no_improve_count = 0
+                    #if no_improve_count >= patience:
+                    #    agent.adjust_learning_rate(0.8)
+                    #    no_improve_count = 0
             except Exception as e:
                 logger.error(f"Errore durante l'episodio {ep+1} nel branch {branch_name}: {e}")
                 continue
